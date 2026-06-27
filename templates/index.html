@@ -137,6 +137,14 @@
     .ptz-center { color: #555; cursor: default; }
     .ptz-center:active { background: rgba(28,28,28,0.85); color: #555; border-color: #3a3a3a; }
 
+    .logout {
+      position: fixed; top: 12px; right: 14px;
+      font-size: 0.75rem; color: #777; text-decoration: none;
+      border: 1px solid #2a2a2a; border-radius: 6px; padding: 5px 12px;
+      background: #161616; transition: all 0.15s;
+    }
+    .logout:hover { color: #eee; border-color: #444; }
+
     .status { font-size: 0.75rem; color: #555; }
 
     .dot {
@@ -225,6 +233,8 @@
   </style>
 </head>
 <body>
+
+  <a href="/logout" class="logout" title="Sair">Sair</a>
 
   <h1>Câmera IP</h1>
 

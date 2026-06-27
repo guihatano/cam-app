@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Entrar — Câmera</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0d0d0d; color: #eee;
+      font-family: system-ui, sans-serif;
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      padding: 16px;
+    }
+    .card {
+      background: #161616; border: 1px solid #222; border-radius: 12px;
+      padding: 28px 24px; width: 100%; max-width: 320px;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+    }
+    h1 {
+      font-size: 0.8rem; font-weight: 500; color: #888;
+      letter-spacing: 0.08em; text-transform: uppercase;
+      text-align: center; margin-bottom: 20px;
+    }
+    label { font-size: 0.75rem; color: #777; display: block; margin-bottom: 4px; }
+    input {
+      width: 100%; background: #1a1a1a; border: 1px solid #333; color: #eee;
+      padding: 9px 12px; border-radius: 6px; font-size: 0.9rem; margin-bottom: 14px;
+    }
+    input:focus { outline: none; border-color: #2e7d32; }
+    button {
+      width: 100%; background: #2e7d32; border: none; color: #fff;
+      padding: 10px; border-radius: 6px; cursor: pointer; font-size: 0.9rem;
+      transition: background 0.15s;
+    }
+    button:hover { background: #357a38; }
+    .error { color: #e57373; font-size: 0.8rem; text-align: center; margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+  <form class="card" method="POST">
+    <h1>Câmera IP</h1>
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    <label for="user">Usuário</label>
+    <input id="user" name="user" autocomplete="username" autofocus />
+    <label for="password">Senha</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" />
+    <button type="submit">Entrar</button>
+  </form>
+</body>
+</html>

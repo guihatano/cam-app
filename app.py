@@ -1,6 +1,8 @@
 import cv2
 import hashlib
+import hmac
 import os
+import secrets
 import subprocess
 import tempfile
 import threading
@@ -8,7 +10,10 @@ import time
 from datetime import datetime, date
 from urllib.parse import urlparse
 
-from flask import Flask, Response, jsonify, render_template, request, send_file, abort
+from flask import (
+    Flask, Response, jsonify, render_template, request, send_file, abort,
+    session, redirect, url_for,
+)
 from dotenv import load_dotenv
 
 from xmeye import XMEyeClient, StreamDemux
@@ -17,10 +22,14 @@ from onvif_ptz import OnvifPTZ
 load_dotenv()
 
 app = Flask(__name__)
+app.secret_key = os.getenv("SECRET_KEY") or secrets.token_hex(32)
 
 RTSP_URL = os.getenv("RTSP_URL", "rtsp://admin:admin@192.168.1.100:554/")
 JPEG_QUALITY = int(os.getenv("JPEG_QUALITY", "80"))
 PORT = int(os.getenv("PORT", "5000"))
+
+AUTH_USER = os.getenv("AUTH_USER", "admin")
+AUTH_PASSWORD = os.getenv("AUTH_PASSWORD", "")
 
 _parsed = urlparse(RTSP_URL)
 CAMERA_HOST = _parsed.hostname
@@ -86,6 +95,39 @@ def generate_mjpeg(source):
             b"Content-Type: image/jpeg\r\n\r\n" + buffer.tobytes() + b"\r\n"
         )
         time.sleep(1 / 30)
+
+
+@app.before_request
+def require_login():
+    if request.endpoint in ("login", "static"):
+        return
+    if session.get("auth"):
+        return
+    if request.method == "GET" and "text/html" in request.headers.get("Accept", ""):
+        return redirect(url_for("login", next=request.path))
+    return "Unauthorized", 401
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    error = None
+    if request.method == "POST":
+        user = request.form.get("user", "")
+        pw = request.form.get("password", "")
+        ok_user = hmac.compare_digest(user, AUTH_USER)
+        ok_pw = bool(AUTH_PASSWORD) and hmac.compare_digest(pw, AUTH_PASSWORD)
+        if ok_user and ok_pw:
+            session["auth"] = True
+            nxt = request.args.get("next", "")
+            return redirect(nxt if nxt.startswith("/") else url_for("index"))
+        error = "Usuário ou senha inválidos."
+    return render_template("login.html", error=error)
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
 
 
 @app.route("/")
