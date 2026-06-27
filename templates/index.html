@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Câmera</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #0d0d0d;
+      color: #eee;
+      font-family: system-ui, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px;
+      gap: 16px;
+    }
+
+    h1 {
+      font-size: 1rem;
+      font-weight: 500;
+      color: #888;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 4px;
+      background: #161616;
+      border-radius: 8px;
+      padding: 4px;
+    }
+
+    .tab {
+      padding: 7px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      color: #666;
+      border: none;
+      background: transparent;
+      transition: all 0.15s;
+    }
+
+    .tab.active { background: #222; color: #eee; }
+
+    /* Panels */
+    .panel { display: none; width: 100%; max-width: 960px; }
+    .panel.active { display: flex; flex-direction: column; gap: 16px; align-items: center; }
+
+    /* Video */
+    .video-wrapper {
+      width: 100%;
+      position: relative;
+      background: #111;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 4px 32px rgba(0,0,0,0.6);
+    }
+
+    #feed { width: 100%; display: block; }
+
+    .overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #111;
+      font-size: 0.9rem;
+      color: #555;
+    }
+
+    .overlay.hidden { display: none; }
+
+    /* Controls */
+    .controls { display: flex; gap: 12px; }
+
+    button {
+      background: #222;
+      border: 1px solid #333;
+      color: #ccc;
+      padding: 8px 18px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      transition: background 0.15s;
+    }
+
+    button:hover { background: #2e2e2e; color: #fff; }
+    button:disabled { opacity: 0.4; cursor: default; }
+
+    .status { font-size: 0.75rem; color: #555; }
+
+    .dot {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #444;
+      margin-right: 6px;
+      transition: background 0.3s;
+    }
+
+    .dot.live { background: #22c55e; box-shadow: 0 0 6px #22c55e88; }
+
+    /* Recordings panel */
+    .rec-toolbar {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      width: 100%;
+    }
+
+    .rec-toolbar input[type="date"] {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      color: #eee;
+      padding: 7px 12px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+    }
+
+    .rec-list {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .rec-item {
+      background: #161616;
+      border: 1px solid #222;
+      border-radius: 8px;
+      padding: 12px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .rec-time {
+      font-size: 0.85rem;
+      color: #ccc;
+    }
+
+    .rec-time span { color: #666; font-size: 0.75rem; margin-left: 8px; }
+
+    .rec-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+    .rec-actions button {
+      padding: 6px 14px;
+      font-size: 0.8rem;
+    }
+
+    .rec-empty {
+      text-align: center;
+      color: #444;
+      padding: 40px 0;
+      font-size: 0.9rem;
+    }
+
+    /* Playback */
+    .playback-wrapper {
+      width: 100%;
+      position: relative;
+      background: #111;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    #playback-feed { width: 100%; display: block; }
+
+    .playback-info {
+      font-size: 0.8rem;
+      color: #555;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Câmera IP</h1>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('live')">Ao vivo</button>
+    <button class="tab" onclick="switchTab('recordings')">Gravações</button>
+  </div>
+
+  <!-- Live panel -->
+  <div class="panel active" id="panel-live">
+    <div class="video-wrapper">
+      <img id="feed" src="/stream" alt="stream"
+           onload="onLoad()" onerror="onError()" />
+      <div class="overlay" id="overlay">Conectando...</div>
+    </div>
+
+    <div class="controls">
+      <button onclick="snapshot()">Salvar foto</button>
+      <button onclick="reloadStream()">Reconectar</button>
+    </div>
+
+    <div class="status">
+      <span class="dot" id="dot"></span>
+      <span id="status-text">Aguardando stream...</span>
+    </div>
+  </div>
+
+  <!-- Recordings panel -->
+  <div class="panel" id="panel-recordings">
+    <div class="rec-toolbar">
+      <input type="date" id="rec-date" />
+      <button onclick="loadRecordings()">Buscar</button>
+    </div>
+
+    <div class="rec-list" id="rec-list">
+      <div class="rec-empty">Selecione uma data e clique em Buscar.</div>
+    </div>
+
+    <!-- Playback inline -->
+    <div id="playback-section" style="display:none; width:100%; flex-direction:column; gap:8px; align-items:center;">
+      <div class="playback-wrapper">
+        <video id="playback-feed" controls playsinline style="width:100%; display:block;"></video>
+        <div class="overlay" id="playback-overlay">Preparando gravação...</div>
+      </div>
+      <div class="playback-info" id="playback-info"></div>
+      <button onclick="stopPlayback()">Fechar</button>
+    </div>
+  </div>
+
+  <script>
+    // ── Tab switching ──────────────────────────────
+    function switchTab(name) {
+      document.querySelectorAll('.tab').forEach((t, i) => {
+        t.classList.toggle('active', ['live','recordings'][i] === name);
+      });
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      document.getElementById('panel-' + name).classList.add('active');
+    }
+
+    // ── Live stream ───────────────────────────────
+    const feed = document.getElementById('feed');
+    const overlay = document.getElementById('overlay');
+    const dot = document.getElementById('dot');
+    const statusText = document.getElementById('status-text');
+
+    function onLoad() {
+      overlay.classList.add('hidden');
+      dot.classList.add('live');
+      statusText.textContent = 'Ao vivo';
+    }
+
+    function onError() {
+      overlay.classList.remove('hidden');
+      overlay.textContent = 'Sem sinal — tentando reconectar...';
+      dot.classList.remove('live');
+      statusText.textContent = 'Reconectando...';
+      setTimeout(reloadStream, 3000);
+    }
+
+    function reloadStream() {
+      feed.src = '/stream?' + Date.now();
+    }
+
+    function snapshot() {
+      const a = document.createElement('a');
+      a.href = '/snapshot?' + Date.now();
+      a.download = 'camera_' + new Date().toISOString().slice(0,19).replace(/[:T]/g,'-') + '.jpg';
+      a.click();
+    }
+
+    // ── Recordings ────────────────────────────────
+    let currentRecordings = [];
+    const recDateInput = document.getElementById('rec-date');
+    recDateInput.value = new Date().toISOString().slice(0,10);
+
+    async function loadRecordings() {
+      const date = recDateInput.value;
+      const list = document.getElementById('rec-list');
+      list.innerHTML = '<div class="rec-empty">Buscando...</div>';
+
+      try {
+        const resp = await fetch('/api/recordings?date=' + date);
+        const data = await resp.json();
+
+        if (data.error) {
+          list.innerHTML = `<div class="rec-empty">Erro: ${data.error}</div>`;
+          return;
+        }
+
+        if (!data.recordings.length) {
+          list.innerHTML = '<div class="rec-empty">Nenhuma gravação encontrada nesta data.</div>';
+          return;
+        }
+
+        currentRecordings = data.recordings;
+        list.innerHTML = data.recordings.map((r, i) => {
+          const start = r.start || '—';
+          const end   = r.end   || '—';
+          const dur   = duration(r.start, r.end);
+          return `
+            <div class="rec-item">
+              <div class="rec-time">
+                ${start} → ${end}
+                <span>${dur}</span>
+              </div>
+              <div class="rec-actions">
+                <button onclick="playRecording(${i})">▶ Reproduzir</button>
+              </div>
+            </div>`;
+        }).join('');
+      } catch (e) {
+        list.innerHTML = '<div class="rec-empty">Erro ao conectar com a câmera.</div>';
+      }
+    }
+
+    function duration(start, end) {
+      try {
+        const s = new Date(start.replace(' ', 'T'));
+        const e = new Date(end.replace(' ', 'T'));
+        const secs = Math.round((e - s) / 1000);
+        const m = Math.floor(secs / 60);
+        const s2 = secs % 60;
+        return `${m}m ${s2}s`;
+      } catch { return ''; }
+    }
+
+    function playRecording(i) {
+      const r = currentRecordings[i];
+      if (!r) return;
+      const section = document.getElementById('playback-section');
+      const pbFeed  = document.getElementById('playback-feed');
+      const pbInfo  = document.getElementById('playback-info');
+      const overlay = document.getElementById('playback-overlay');
+
+      section.style.display = 'flex';
+      pbInfo.textContent = `${r.start} → ${r.end}`;
+      overlay.classList.remove('hidden');
+      overlay.textContent = 'Preparando gravação (baixando + convertendo, ~1-2 min)...';
+
+      pbFeed.src = '/playback?filename=' + encodeURIComponent(r.filename)
+                 + '&start=' + encodeURIComponent(r.start)
+                 + '&end=' + encodeURIComponent(r.end);
+      pbFeed.onloadeddata = () => { overlay.classList.add('hidden'); pbFeed.play().catch(()=>{}); };
+      pbFeed.onerror = () => { overlay.classList.remove('hidden'); overlay.textContent = 'Erro ao preparar a gravação.'; };
+      section.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function stopPlayback() {
+      const section = document.getElementById('playback-section');
+      const pbFeed = document.getElementById('playback-feed');
+      pbFeed.pause();
+      pbFeed.removeAttribute('src');
+      pbFeed.load();
+      section.style.display = 'none';
+    }
+  </script>
+
+</body>
+</html>

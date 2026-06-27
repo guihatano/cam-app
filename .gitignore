@@ -1,0 +1,12 @@
+# Segredos / config local
+.env
+
+# Gravações baixadas (cache, arquivos grandes)
+recordings/
+
+# Python
+__pycache__/
+*.pyc
+
+# Claude config local
+.claude/settings.local.json
