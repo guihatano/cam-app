@@ -95,6 +95,48 @@
     button:hover { background: #2e2e2e; color: #fff; }
     button:disabled { opacity: 0.4; cursor: default; }
 
+    /* PTZ pad — sobreposto no canto inferior esquerdo do vídeo */
+    .ptz-wrap {
+      position: absolute;
+      left: 12px;
+      bottom: 12px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      padding: 8px;
+      background: rgba(0, 0, 0, 0.4);
+      border-radius: 12px;
+      backdrop-filter: blur(3px);
+      opacity: 0.55;
+      transition: opacity 0.15s;
+      z-index: 5;
+    }
+    .ptz-wrap:hover { opacity: 1; }
+    .ptz {
+      display: grid;
+      grid-template-columns: repeat(3, 34px);
+      grid-template-rows: repeat(3, 34px);
+      gap: 4px;
+    }
+    .ptz-zoom { display: flex; flex-direction: column; gap: 4px; }
+    .ptz-btn {
+      background: rgba(28, 28, 28, 0.85);
+      border: 1px solid #3a3a3a;
+      color: #ddd;
+      border-radius: 7px;
+      font-size: 0.95rem;
+      line-height: 1;
+      cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+      transition: background 0.1s;
+    }
+    .ptz-zoom .ptz-btn { width: 34px; height: 34px; font-size: 1.1rem; }
+    .ptz-btn:active { background: #2e7d32; color: #fff; border-color: #2e7d32; }
+    .ptz-center { color: #555; cursor: default; }
+    .ptz-center:active { background: rgba(28,28,28,0.85); color: #555; border-color: #3a3a3a; }
+
     .status { font-size: 0.75rem; color: #555; }
 
     .dot {
@@ -197,6 +239,25 @@
       <img id="feed" src="/stream" alt="stream"
            onload="onLoad()" onerror="onError()" />
       <div class="overlay" id="overlay">Conectando...</div>
+
+      <!-- PTZ sobreposto, canto inferior esquerdo: segure para mover -->
+      <div class="ptz-wrap">
+        <div class="ptz" id="ptz-pad">
+          <button class="ptz-btn" data-dir="upleft">↖</button>
+          <button class="ptz-btn" data-dir="up">↑</button>
+          <button class="ptz-btn" data-dir="upright">↗</button>
+          <button class="ptz-btn" data-dir="left">←</button>
+          <button class="ptz-btn ptz-center" disabled>⊕</button>
+          <button class="ptz-btn" data-dir="right">→</button>
+          <button class="ptz-btn" data-dir="downleft">↙</button>
+          <button class="ptz-btn" data-dir="down">↓</button>
+          <button class="ptz-btn" data-dir="downright">↘</button>
+        </div>
+        <div class="ptz-zoom">
+          <button class="ptz-btn" id="zoom-in" title="Zoom digital +">+</button>
+          <button class="ptz-btn" id="zoom-out" title="Zoom digital −">−</button>
+        </div>
+      </div>
     </div>
 
     <div class="controls">
@@ -272,6 +333,43 @@
       a.download = 'camera_' + new Date().toISOString().slice(0,19).replace(/[:T]/g,'-') + '.jpg';
       a.click();
     }
+
+    // ── PTZ (segurar para mover) ──────────────────
+    let ptzMoving = false;
+    function ptzStart(dir) {
+      ptzMoving = true;
+      fetch('/ptz/move?dir=' + dir).catch(() => {});
+    }
+    function ptzStop() {
+      if (!ptzMoving) return;
+      ptzMoving = false;
+      fetch('/ptz/stop').catch(() => {});
+    }
+    document.querySelectorAll('.ptz-btn[data-dir]').forEach(btn => {
+      const dir = btn.dataset.dir;
+      const start = (e) => { e.preventDefault(); ptzStart(dir); };
+      btn.addEventListener('mousedown', start);
+      btn.addEventListener('touchstart', start, { passive: false });
+      ['mouseup', 'mouseleave', 'touchend', 'touchcancel'].forEach(ev =>
+        btn.addEventListener(ev, ptzStop));
+    });
+    // garante parada se soltar fora do botão
+    window.addEventListener('mouseup', ptzStop);
+    window.addEventListener('touchend', ptzStop);
+
+    // ── Zoom digital (a câmera não tem zoom óptico) ──
+    let zoomLevel = 1;
+    const ZOOM_MAX = 4, ZOOM_STEP = 1.3;
+    function applyZoom() {
+      feed.style.transformOrigin = 'center center';
+      feed.style.transform = 'scale(' + zoomLevel.toFixed(3) + ')';
+    }
+    document.getElementById('zoom-in').addEventListener('click', () => {
+      zoomLevel = Math.min(zoomLevel * ZOOM_STEP, ZOOM_MAX); applyZoom();
+    });
+    document.getElementById('zoom-out').addEventListener('click', () => {
+      zoomLevel = Math.max(zoomLevel / ZOOM_STEP, 1); applyZoom();
+    });
 
     // ── Recordings ────────────────────────────────
     let currentRecordings = [];

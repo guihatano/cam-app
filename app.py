@@ -12,6 +12,7 @@ from flask import Flask, Response, jsonify, render_template, request, send_file,
 from dotenv import load_dotenv
 
 from xmeye import XMEyeClient, StreamDemux
+from onvif_ptz import OnvifPTZ
 
 load_dotenv()
 
@@ -25,6 +26,10 @@ _parsed = urlparse(RTSP_URL)
 CAMERA_HOST = _parsed.hostname
 CAMERA_USER = _parsed.username or "admin"
 CAMERA_PASS = _parsed.password or ""
+
+ONVIF_PORT = int(os.getenv("ONVIF_PORT", "8899"))
+PTZ_SPEED = float(os.getenv("PTZ_SPEED", "0.5"))
+ptz = OnvifPTZ(CAMERA_HOST, CAMERA_USER, CAMERA_PASS, port=ONVIF_PORT)
 
 
 class CameraStream:
@@ -103,6 +108,43 @@ def snapshot():
         return "Camera not ready", 503
     _, buffer = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
     return Response(buffer.tobytes(), mimetype="image/jpeg")
+
+
+_PTZ_DIRS = {
+    "up":    (0,  1), "down":  (0, -1),
+    "left":  (-1, 0), "right": (1,  0),
+    "upleft":   (-1,  1), "upright":   (1,  1),
+    "downleft": (-1, -1), "downright": (1, -1),
+}
+
+
+@app.route("/ptz/move")
+def ptz_move():
+    direction = request.args.get("dir", "")
+    if direction in _PTZ_DIRS:
+        px, py = _PTZ_DIRS[direction]
+        # Esta câmera tem o eixo de pan invertido em relação ao ONVIF padrão
+        pan, tilt, zoom = -px * PTZ_SPEED, py * PTZ_SPEED, 0.0
+    elif direction == "zoomin":
+        pan, tilt, zoom = 0.0, 0.0, PTZ_SPEED
+    elif direction == "zoomout":
+        pan, tilt, zoom = 0.0, 0.0, -PTZ_SPEED
+    else:
+        return "Invalid dir", 400
+    try:
+        ptz.move(pan=pan, tilt=tilt, zoom=zoom)
+    except Exception as e:
+        return f"PTZ error: {e}", 502
+    return "", 204
+
+
+@app.route("/ptz/stop")
+def ptz_stop():
+    try:
+        ptz.stop()
+    except Exception as e:
+        return f"PTZ error: {e}", 502
+    return "", 204
 
 
 @app.route("/api/recordings")
