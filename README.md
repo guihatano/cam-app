@@ -45,11 +45,31 @@ python app.py
 
 Acesse **http://localhost:5000** (ou `http://<ip-da-maquina>:5000` de outro dispositivo na LAN). Faça login com o usuário/senha definidos no `.env`.
 
+## Deploy em servidor (ex: Armbian)
+
+O `deploy.sh` envia o app via `rsync` (incluindo o `.env` local), instala `ffmpeg`/`python3-venv` se faltarem, cria o `venv`, instala as dependências e registra o serviço systemd `cam-app` (sobe no boot e reinicia se cair).
+
+```bash
+DEPLOY_HOST=192.168.1.50 ./deploy.sh
+# opcionais: DEPLOY_USER (padrão: usuário local), DEPLOY_DIR (padrão: /home/$DEPLOY_USER/cam-app)
+```
+
+Requer acesso SSH ao servidor e `rsync` instalado nos dois lados. O `sudo` pode pedir a senha do servidor. O `venv/` e o cache `recordings/` do servidor são preservados entre deploys.
+
+No servidor:
+
+```bash
+sudo systemctl status cam-app     # estado
+journalctl -u cam-app -f          # logs
+```
+
+> Em Armbian **64 bits** (`uname -m` → `aarch64`) o `opencv-python-headless` instala via wheel pronto. Em 32 bits (`armv7l`) o pip tentaria compilar — nesse caso use `sudo apt install python3-opencv` e crie o venv com `--system-site-packages`.
+
 ## Configuração (`.env`)
 
 | Variável        | Descrição                                                              | Padrão                  |
 |-----------------|------------------------------------------------------------------------|-------------------------|
-| `RTSP_URL`      | URL RTSP da câmera, com usuário e senha (ex: `rtsp://admin:senha@192.168.68.106:554/`) | — |
+| `RTSP_URL`      | URL RTSP da câmera, com usuário e senha (ex: `rtsp://admin:senha@192.168.1.100:554/`) | — |
 | `AUTH_USER`     | Usuário de login do app                                                | `admin`                 |
 | `AUTH_PASSWORD` | Senha de login do app (obrigatória)                                    | — (vazia = login negado)|
 | `SECRET_KEY`    | Chave secreta das sessões Flask (gere uma aleatória)                   | aleatória a cada boot   |
@@ -69,6 +89,8 @@ Acesse **http://localhost:5000** (ou `http://<ip-da-maquina>:5000` de outro disp
 | `onvif_ptz.py`        | Cliente ONVIF (porta 8899) — controle de pan/tilt/zoom                    |
 | `templates/index.html`| UI com abas "Ao vivo" e "Gravações"                                       |
 | `templates/login.html`| Tela de login                                                            |
+| `deploy.sh`           | Deploy para servidor remoto via rsync + systemd                          |
+| `deploy/`             | Template do serviço systemd e script de setup executado no servidor      |
 | `recordings/`         | Cache dos MP4 já transcodados (pode ser apagado a qualquer momento)      |
 
 ## Notas

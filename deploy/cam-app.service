@@ -1,0 +1,17 @@
+# Template do serviço systemd. __USER__ e __APP_DIR__ são substituídos pelo deploy.sh.
+[Unit]
+Description=cam-app (interface web da câmera iCSee)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=__APP_DIR__
+ExecStart=__APP_DIR__/venv/bin/python app.py
+Environment=PYTHONUNBUFFERED=1
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
