@@ -41,9 +41,13 @@ PTZ_SPEED = float(os.getenv("PTZ_SPEED", "0.5"))
 ptz = OnvifPTZ(CAMERA_HOST, CAMERA_USER, CAMERA_PASS, port=ONVIF_PORT)
 
 
-# Stream usado no "Ao vivo". Recomendado apontar para o substream (resolução menor):
-# decodificar o stream principal em tempo real custa muita CPU em máquinas ARM.
+# Stream usado no "Ao vivo" em qualidade SD. Recomendado apontar para o substream
+# (resolução menor): decodificar o stream principal custa muita CPU em máquinas ARM.
 LIVE_RTSP_URL = os.getenv("LIVE_RTSP_URL") or RTSP_URL
+# Altura máxima do JPEG enviado ao navegador em cada qualidade. O HD usa o stream
+# principal reduzido: em resolução cheia o MJPEG passaria de ~50 Mbps.
+SD_MAX_HEIGHT = 720
+HD_MAX_HEIGHT = 1296
 # Segundos que a captura continua ativa depois que o último espectador sai
 LIVE_IDLE_TIMEOUT = 10
 
@@ -55,8 +59,9 @@ class CameraStream:
     os espectadores. A captura para LIVE_IDLE_TIMEOUT segundos após o último sair.
     """
 
-    def __init__(self, url):
+    def __init__(self, url, max_height=None):
         self.url = url
+        self.max_height = max_height
         self.cond = threading.Condition()
         self.frame = None
         self.jpeg = None
@@ -106,7 +111,12 @@ class CameraStream:
                     time.sleep(1)
                     continue
 
-                _, buffer = cv2.imencode(".jpg", frame, encode_params)
+                out = frame
+                h, w = frame.shape[:2]
+                if self.max_height and h > self.max_height:
+                    out = cv2.resize(frame, (w * self.max_height // h, self.max_height),
+                                     interpolation=cv2.INTER_AREA)
+                _, buffer = cv2.imencode(".jpg", out, encode_params)
                 with self.cond:
                     self.frame = frame
                     self.jpeg = buffer.tobytes()
@@ -136,13 +146,16 @@ class CameraStream:
                 return last_seq, None
             return self.seq, self.jpeg
 
-    def wait_frame(self, timeout=10):
+    def current_frame(self):
+        """Último quadro em resolução original, ou None se a captura estiver parada."""
         with self.cond:
-            self.cond.wait_for(lambda: self.frame is not None, timeout)
             return self.frame.copy() if self.frame is not None else None
 
 
-camera = CameraStream(LIVE_RTSP_URL)
+LIVE_STREAMS = {
+    "sd": CameraStream(LIVE_RTSP_URL, max_height=SD_MAX_HEIGHT),
+    "hd": CameraStream(RTSP_URL, max_height=HD_MAX_HEIGHT),
+}
 
 
 def generate_mjpeg(cam):
@@ -164,12 +177,10 @@ def generate_mjpeg(cam):
 
 def capture_snapshot():
     """Quadro para o snapshot, sempre do stream principal (resolução máxima)."""
-    if LIVE_RTSP_URL == RTSP_URL:
-        camera.acquire()
-        try:
-            return camera.wait_frame()
-        finally:
-            camera.release()
+    # se alguém já assiste em HD, o quadro do stream principal está pronto
+    frame = LIVE_STREAMS["hd"].current_frame()
+    if frame is not None:
+        return frame
 
     cap = cv2.VideoCapture(RTSP_URL)
     try:
@@ -223,7 +234,7 @@ def index():
 @app.route("/stream")
 def stream():
     return Response(
-        generate_mjpeg(camera),
+        generate_mjpeg(LIVE_STREAMS.get(request.args.get("q"), LIVE_STREAMS["sd"])),
         mimetype="multipart/x-mixed-replace; boundary=frame",
     )
 

@@ -246,7 +246,7 @@
   <!-- Live panel -->
   <div class="panel active" id="panel-live">
     <div class="video-wrapper">
-      <img id="feed" src="/stream" alt="stream"
+      <img id="feed" alt="stream"
            onload="onLoad()" onerror="onError()" />
       <div class="overlay" id="overlay">Conectando...</div>
 
@@ -273,6 +273,7 @@
     <div class="controls">
       <button onclick="snapshot()">Salvar foto</button>
       <button onclick="reloadStream()">Reconectar</button>
+      <button id="quality-btn" onclick="toggleQuality()" title="Alternar qualidade do ao vivo"></button>
     </div>
 
     <div class="status">
@@ -337,13 +338,31 @@
     }
 
     function reloadStream() {
-      feed.src = '/stream?' + Date.now();
+      feed.src = '/stream?q=' + quality + '&t=' + Date.now();
+    }
+
+    // Qualidade: SD = substream (leve), HD = stream principal reduzido (mais CPU no servidor)
+    const qualityBtn = document.getElementById('quality-btn');
+    let quality = 'sd';
+    try { if (localStorage.getItem('quality') === 'hd') quality = 'hd'; } catch (e) {}
+    function renderQuality() {
+      qualityBtn.textContent = 'Qualidade: ' + quality.toUpperCase();
+    }
+    function toggleQuality() {
+      quality = quality === 'sd' ? 'hd' : 'sd';
+      try { localStorage.setItem('quality', quality); } catch (e) {}
+      renderQuality();
+      if (liveActive) {
+        overlay.classList.remove('hidden');
+        overlay.textContent = 'Conectando...';
+        reloadStream();
+      }
     }
 
     // Só mantém o stream aberto com a aba "Ao vivo" visível: sem espectadores,
     // o servidor para de decodificar a câmera (economiza CPU).
     let currentTab = 'live';
-    let liveActive = true;
+    let liveActive = false;
     function updateLive() {
       const want = currentTab === 'live' && !document.hidden;
       if (want === liveActive) return;
@@ -359,6 +378,8 @@
       }
     }
     document.addEventListener('visibilitychange', updateLive);
+    renderQuality();
+    updateLive();  // inicia o stream (se a aba estiver visível)
 
     function snapshot() {
       const a = document.createElement('a');

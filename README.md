@@ -4,7 +4,7 @@ Interface web leve para câmera IP **iCSee / XM (X6E-WEQ)** — visualização a
 
 ## Funcionalidades
 
-- **Ao vivo** — stream MJPEG a partir do RTSP da câmera
+- **Ao vivo** — stream MJPEG a partir do RTSP da câmera, com botão de qualidade SD (substream, leve) / HD (stream principal reduzido, mais CPU no servidor). A captura só roda enquanto alguém está assistindo
 - **Snapshot** — captura um quadro em JPEG
 - **PTZ** — mover a câmera (pan/tilt) e zoom via ONVIF, com "segurar para mover"
 - **Gravações** — lista as gravações do SD por data (protocolo XMEye) e reproduz no navegador (download DVRIP → demux XM → transcode para H.264/MP4, com cache local)
