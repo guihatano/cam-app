@@ -70,6 +70,7 @@ journalctl -u cam-app -f          # logs
 | Variável        | Descrição                                                              | Padrão                  |
 |-----------------|------------------------------------------------------------------------|-------------------------|
 | `RTSP_URL`      | URL RTSP da câmera, com usuário e senha (ex: `rtsp://admin:senha@192.168.1.100:554/`) | — |
+| `LIVE_RTSP_URL` | Stream do "Ao vivo"; recomendado o substream (ex: `rtsp://192.168.1.100:554/user=admin&password=senha&channel=1&stream=1.sdp`). O snapshot segue usando o `RTSP_URL` | `RTSP_URL` |
 | `AUTH_USER`     | Usuário de login do app                                                | `admin`                 |
 | `AUTH_PASSWORD` | Senha de login do app (obrigatória)                                    | — (vazia = login negado)|
 | `SECRET_KEY`    | Chave secreta das sessões Flask (gere uma aleatória)                   | aleatória a cada boot   |

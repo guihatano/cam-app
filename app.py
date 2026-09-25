@@ -41,60 +41,145 @@ PTZ_SPEED = float(os.getenv("PTZ_SPEED", "0.5"))
 ptz = OnvifPTZ(CAMERA_HOST, CAMERA_USER, CAMERA_PASS, port=ONVIF_PORT)
 
 
+# Stream usado no "Ao vivo". Recomendado apontar para o substream (resolução menor):
+# decodificar o stream principal em tempo real custa muita CPU em máquinas ARM.
+LIVE_RTSP_URL = os.getenv("LIVE_RTSP_URL") or RTSP_URL
+# Segundos que a captura continua ativa depois que o último espectador sai
+LIVE_IDLE_TIMEOUT = 10
+
+
 class CameraStream:
+    """Captura RTSP sob demanda: só decodifica enquanto houver alguém assistindo.
+
+    Cada quadro é convertido para JPEG uma única vez e compartilhado entre todos
+    os espectadores. A captura para LIVE_IDLE_TIMEOUT segundos após o último sair.
+    """
+
     def __init__(self, url):
         self.url = url
+        self.cond = threading.Condition()
         self.frame = None
-        self.lock = threading.Lock()
-        self.running = False
+        self.jpeg = None
+        self.seq = 0
+        self.viewers = 0
+        self.last_used = 0.0
         self._thread = None
 
-    def start(self):
-        self.running = True
-        self._thread = threading.Thread(target=self._capture_loop, daemon=True)
-        self._thread.start()
+    def acquire(self):
+        with self.cond:
+            self.viewers += 1
+            self.last_used = time.monotonic()
+            if self._thread is None:
+                self._thread = threading.Thread(target=self._capture_loop, daemon=True)
+                self._thread.start()
+
+    def release(self):
+        with self.cond:
+            self.viewers -= 1
+            self.last_used = time.monotonic()
+
+    def _should_stop(self):
+        return self.viewers <= 0 and time.monotonic() - self.last_used > LIVE_IDLE_TIMEOUT
 
     def _capture_loop(self):
         cap = None
-        while self.running:
-            if cap is None or not cap.isOpened():
-                cap = cv2.VideoCapture(self.url)
-                if not cap.isOpened():
-                    time.sleep(3)
+        encode_params = [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY]
+        try:
+            while True:
+                with self.cond:
+                    if self._should_stop():
+                        self._finish()
+                        return
+
+                if cap is None:
+                    cap = cv2.VideoCapture(self.url)
+                    if not cap.isOpened():
+                        cap.release()
+                        cap = None
+                        time.sleep(3)
+                        continue
+
+                ret, frame = cap.read()
+                if not ret:
+                    cap.release()
+                    cap = None
+                    time.sleep(1)
                     continue
 
-            ret, frame = cap.read()
-            if not ret:
+                _, buffer = cv2.imencode(".jpg", frame, encode_params)
+                with self.cond:
+                    self.frame = frame
+                    self.jpeg = buffer.tobytes()
+                    self.seq += 1
+                    self.cond.notify_all()
+        finally:
+            if cap is not None:
                 cap.release()
-                cap = None
-                time.sleep(1)
-                continue
+            with self.cond:
+                if self._thread is threading.current_thread():  # saída por exceção
+                    self._finish()
 
-            with self.lock:
-                self.frame = frame
+    def _finish(self):
+        """Marca a captura como parada. Deve ser chamado com self.cond adquirido,
+        na mesma seção crítica da decisão de parar, para acquire() nunca ver uma
+        thread que já está saindo."""
+        # descarta o último quadro para não servir imagem velha na próxima conexão
+        self.frame = self.jpeg = None
+        self._thread = None
+        self.cond.notify_all()
 
-    def get_frame(self):
-        with self.lock:
+    def wait_jpeg(self, last_seq, timeout=5):
+        """Espera um JPEG mais novo que last_seq. Retorna (seq, jpeg), jpeg=None se expirar."""
+        with self.cond:
+            self.cond.wait_for(lambda: self.seq != last_seq and self.jpeg is not None, timeout)
+            if self.seq == last_seq or self.jpeg is None:
+                return last_seq, None
+            return self.seq, self.jpeg
+
+    def wait_frame(self, timeout=10):
+        with self.cond:
+            self.cond.wait_for(lambda: self.frame is not None, timeout)
             return self.frame.copy() if self.frame is not None else None
 
 
-camera = CameraStream(RTSP_URL)
-camera.start()
+camera = CameraStream(LIVE_RTSP_URL)
 
 
-def generate_mjpeg(source):
-    encode_params = [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY]
-    while True:
-        frame = source() if callable(source) else source.get_frame()
-        if frame is None:
-            time.sleep(0.1)
-            continue
-        _, buffer = cv2.imencode(".jpg", frame, encode_params)
-        yield (
-            b"--frame\r\n"
-            b"Content-Type: image/jpeg\r\n\r\n" + buffer.tobytes() + b"\r\n"
-        )
-        time.sleep(1 / 30)
+def generate_mjpeg(cam):
+    cam.acquire()
+    try:
+        seq = 0
+        while True:
+            seq, jpeg = cam.wait_jpeg(seq)
+            if jpeg is None:
+                continue
+            yield (
+                b"--frame\r\n"
+                b"Content-Type: image/jpeg\r\n\r\n" + jpeg + b"\r\n"
+            )
+    finally:
+        # chamado quando o cliente desconecta (o servidor fecha o gerador)
+        cam.release()
+
+
+def capture_snapshot():
+    """Quadro para o snapshot, sempre do stream principal (resolução máxima)."""
+    if LIVE_RTSP_URL == RTSP_URL:
+        camera.acquire()
+        try:
+            return camera.wait_frame()
+        finally:
+            camera.release()
+
+    cap = cv2.VideoCapture(RTSP_URL)
+    try:
+        for _ in range(30):
+            ret, frame = cap.read()
+            if ret:
+                return frame
+        return None
+    finally:
+        cap.release()
 
 
 @app.before_request
@@ -145,7 +230,7 @@ def stream():
 
 @app.route("/snapshot")
 def snapshot():
-    frame = camera.get_frame()
+    frame = capture_snapshot()
     if frame is None:
         return "Camera not ready", 503
     _, buffer = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 95])

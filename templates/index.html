@@ -311,6 +311,8 @@
       });
       document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
       document.getElementById('panel-' + name).classList.add('active');
+      currentTab = name;
+      updateLive();
     }
 
     // ── Live stream ───────────────────────────────
@@ -326,16 +328,37 @@
     }
 
     function onError() {
+      if (!liveActive) return;
       overlay.classList.remove('hidden');
       overlay.textContent = 'Sem sinal — tentando reconectar...';
       dot.classList.remove('live');
       statusText.textContent = 'Reconectando...';
-      setTimeout(reloadStream, 3000);
+      setTimeout(() => { if (liveActive) reloadStream(); }, 3000);
     }
 
     function reloadStream() {
       feed.src = '/stream?' + Date.now();
     }
+
+    // Só mantém o stream aberto com a aba "Ao vivo" visível: sem espectadores,
+    // o servidor para de decodificar a câmera (economiza CPU).
+    let currentTab = 'live';
+    let liveActive = true;
+    function updateLive() {
+      const want = currentTab === 'live' && !document.hidden;
+      if (want === liveActive) return;
+      liveActive = want;
+      if (want) {
+        overlay.classList.remove('hidden');
+        overlay.textContent = 'Conectando...';
+        reloadStream();
+      } else {
+        feed.removeAttribute('src');
+        dot.classList.remove('live');
+        statusText.textContent = 'Pausado';
+      }
+    }
+    document.addEventListener('visibilitychange', updateLive);
 
     function snapshot() {
       const a = document.createElement('a');
