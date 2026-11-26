@@ -1,3 +1,8 @@
+import os
+import stat
+
+from app import load_or_create_secret_key
+
 HTML = {"Accept": "text/html"}
 
 
@@ -53,3 +58,53 @@ def test_logout_ends_session(client):
     resp = client.get("/", headers=HTML)
     assert resp.status_code == 302
     assert resp.headers["Location"].startswith("/login")
+
+
+# --- Chave de sessão persistente (.secret_key) ---
+
+
+def test_secret_key_file_is_created_with_owner_only_permissions(tmp_path):
+    path = tmp_path / ".secret_key"
+
+    key = load_or_create_secret_key(str(path))
+
+    assert key
+    assert path.read_text() == key
+    assert stat.S_IMODE(os.stat(path).st_mode) == 0o600
+
+
+def test_secret_key_is_reused_across_calls(tmp_path):
+    path = str(tmp_path / ".secret_key")
+
+    first = load_or_create_secret_key(path)
+    second = load_or_create_secret_key(path)
+
+    assert first == second
+
+
+def test_existing_secret_key_file_is_respected(tmp_path):
+    path = tmp_path / ".secret_key"
+    path.write_text("chave-existente\n")
+
+    assert load_or_create_secret_key(str(path)) == "chave-existente"
+
+
+def test_empty_secret_key_file_is_regenerated(tmp_path):
+    path = tmp_path / ".secret_key"
+    path.write_text("")
+    path.chmod(0o644)
+
+    key = load_or_create_secret_key(str(path))
+
+    assert key
+    assert path.read_text() == key
+    assert stat.S_IMODE(os.stat(path).st_mode) == 0o600
+
+
+def test_unwritable_location_returns_ephemeral_key_without_raising(tmp_path, capsys):
+    path = str(tmp_path / "nao-existe" / ".secret_key")
+
+    key = load_or_create_secret_key(path)
+
+    assert key
+    assert key not in capsys.readouterr().out

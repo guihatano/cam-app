@@ -1,5 +1,6 @@
 # Segredos / config local
 .env
+.secret_key
 
 # Gravações baixadas (cache, arquivos grandes)
 recordings/

@@ -31,6 +31,7 @@ rsync -az --delete \
     --exclude '__pycache__/' \
     --exclude '*.pyc' \
     --exclude 'recordings/' \
+    --exclude '.secret_key' \
     ./ "$TARGET:$DEPLOY_DIR/"
 
 echo "==> Instalando dependências e configurando o serviço"

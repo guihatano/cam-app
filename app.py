@@ -21,8 +21,34 @@ from onvif_ptz import OnvifPTZ
 
 load_dotenv()
 
+SECRET_KEY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".secret_key")
+
+
+def load_or_create_secret_key(path):
+    """Lê a chave de sessão do arquivo; se não existir (ou estiver vazio), gera e grava com 0600.
+
+    Mantém os logins válidos entre restarts quando SECRET_KEY não está no .env.
+    """
+    try:
+        with open(path) as f:
+            key = f.read().strip()
+        if key:
+            return key
+    except FileNotFoundError:
+        pass
+    key = secrets.token_hex(32)
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        os.fchmod(fd, 0o600)  # o modo do os.open só vale para arquivo novo
+        with os.fdopen(fd, "w") as f:
+            f.write(key)
+    except OSError as e:
+        print(f"[auth] não foi possível gravar {path} ({e}); sessões não sobrevivem a restart")
+    return key
+
+
 app = Flask(__name__)
-app.secret_key = os.getenv("SECRET_KEY") or secrets.token_hex(32)
+app.secret_key = os.getenv("SECRET_KEY") or load_or_create_secret_key(SECRET_KEY_FILE)
 
 RTSP_URL = os.getenv("RTSP_URL", "rtsp://admin:admin@192.168.1.100:554/")
 JPEG_QUALITY = int(os.getenv("JPEG_QUALITY", "80"))
