@@ -7,6 +7,7 @@ recordings/
 # Python
 __pycache__/
 *.pyc
+.pytest_cache/
 
 # Claude config local
 .claude/settings.local.json
