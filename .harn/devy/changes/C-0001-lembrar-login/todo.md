@@ -27,7 +27,7 @@
     Size: M
     Risk: M
 
-- [ ] T-004: Documentar "Lembrar de mim", .secret_key e como derrubar todas as sessões
+- [x] T-004: Documentar "Lembrar de mim", .secret_key e como derrubar todas as sessões
     Atualizar `README.md`. Na tabela de variáveis, mudar a linha de `SECRET_KEY`: o padrão deixa de ser "aleatória a cada boot" e passa a ser "gerada uma vez e salva em `.secret_key`". Na seção de segurança/autenticação, explicar: o checkbox "Lembrar de mim" (30 dias sem uso até pedir login de novo, desmarcado por padrão; sem marcar, a sessão termina ao fechar o navegador); o arquivo `.secret_key` (0600, fora do git e do rsync); como derrubar todas as sessões (apagar `.secret_key` no servidor ou trocar `SECRET_KEY` e reiniciar o serviço com `sudo systemctl restart cam-app`); e o aviso de que, em HTTP puro, o cookie de 30 dias pode ser copiado por quem capturar tráfego na LAN. Em `.env.example`, adicionar `SECRET_KEY` comentada, explicando que é opcional e é auto-gerada em `.secret_key` se ausente. Manter o tom e o idioma (português) atuais dos dois arquivos.
     Acceptance: README descreve checkbox, prazo, `.secret_key` e como invalidar sessões; a linha de `SECRET_KEY` na tabela não diz mais "aleatória a cada boot"; `.env.example` menciona `SECRET_KEY` como opcional.
     Verification: grep -q "Lembrar de mim" README.md && grep -q ".secret_key" README.md && ! grep -q "aleatória a cada boot" README.md && grep -q "SECRET_KEY" .env.example

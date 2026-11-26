@@ -8,7 +8,7 @@ Interface web leve para câmera IP **iCSee / XM (X6E-WEQ)** — visualização a
 - **Snapshot** — captura um quadro em JPEG
 - **PTZ** — mover a câmera (pan/tilt) e zoom via ONVIF, com "segurar para mover"
 - **Gravações** — lista as gravações do SD por data (protocolo XMEye) e reproduz no navegador (download DVRIP → demux XM → transcode para H.264/MP4, com cache local)
-- **Login** — autenticação por sessão protegendo todas as rotas
+- **Login** — autenticação por sessão protegendo todas as rotas, com opção "Lembrar de mim" (30 dias)
 
 ## Requisitos
 
@@ -54,7 +54,7 @@ DEPLOY_HOST=192.168.1.50 ./deploy.sh
 # opcionais: DEPLOY_USER (padrão: usuário local), DEPLOY_DIR (padrão: /home/$DEPLOY_USER/cam-app)
 ```
 
-Requer acesso SSH ao servidor e `rsync` instalado nos dois lados. O `sudo` pode pedir a senha do servidor. O `venv/` e o cache `recordings/` do servidor são preservados entre deploys.
+Requer acesso SSH ao servidor e `rsync` instalado nos dois lados. O `sudo` pode pedir a senha do servidor. O `venv/`, o cache `recordings/` e a chave de sessão `.secret_key` do servidor são preservados entre deploys.
 
 No servidor:
 
@@ -73,13 +73,24 @@ journalctl -u cam-app -f          # logs
 | `LIVE_RTSP_URL` | Stream do "Ao vivo"; recomendado o substream (ex: `rtsp://192.168.1.100:554/user=admin&password=senha&channel=1&stream=1.sdp`). O snapshot segue usando o `RTSP_URL` | `RTSP_URL` |
 | `AUTH_USER`     | Usuário de login do app                                                | `admin`                 |
 | `AUTH_PASSWORD` | Senha de login do app (obrigatória)                                    | — (vazia = login negado)|
-| `SECRET_KEY`    | Chave secreta das sessões Flask (gere uma aleatória)                   | aleatória a cada boot   |
+| `SECRET_KEY`    | Chave secreta das sessões Flask (opcional)                             | gerada uma vez e salva em `.secret_key` |
 | `PORT`          | Porta em que o app sobe                                                | `5000`                  |
 | `JPEG_QUALITY`  | Qualidade do JPEG do stream/snapshot (0–100)                           | `80`                    |
 | `ONVIF_PORT`    | Porta ONVIF da câmera (usada pelo PTZ)                                 | `8899`                  |
 | `PTZ_SPEED`     | Velocidade do movimento PTZ (0–1)                                      | `0.5`                   |
 
 > O usuário e a senha da **câmera** são lidos automaticamente do `RTSP_URL` e reaproveitados para ONVIF e XMEye.
+
+## Login e sessões
+
+- **"Lembrar de mim"** (desmarcado por padrão): marcado, o login dura **30 dias sem uso**. Cada acesso renova o prazo, então quem abre o app com frequência não precisa logar de novo, nem depois de fechar o navegador do celular. Desmarcado, a sessão termina quando o navegador fecha.
+- **"Sair"** encerra a sessão na hora, naquele navegador.
+- **Chave de sessão:** os cookies de login são assinados com a `SECRET_KEY`. Se ela não estiver no `.env`, o app gera uma no primeiro start e grava em `.secret_key` (permissão `0600`, fora do git e do rsync do deploy), para os logins sobreviverem a restarts e deploys.
+- **Derrubar todas as sessões** (ex: celular perdido): no servidor, apague o `.secret_key` (ou troque a `SECRET_KEY` no `.env`) e reinicie o serviço:
+
+  ```bash
+  rm ~/cam-app/.secret_key && sudo systemctl restart cam-app
+  ```
 
 ## Estrutura
 
@@ -93,9 +104,10 @@ journalctl -u cam-app -f          # logs
 | `deploy.sh`           | Deploy para servidor remoto via rsync + systemd                          |
 | `deploy/`             | Template do serviço systemd e script de setup executado no servidor      |
 | `recordings/`         | Cache dos MP4 já transcodados (pode ser apagado a qualquer momento)      |
+| `tests/`              | Testes (pytest): `pip install -r requirements-dev.txt && pytest -q`       |
 
 ## Notas
 
-- O app roda em **HTTP puro** — adequado para uso na LAN. As credenciais trafegam em claro; se for expor fora de casa, use um proxy reverso com HTTPS.
+- O app roda em **HTTP puro** — adequado para uso na LAN. As credenciais e o cookie de sessão trafegam em claro: quem capturar o tráfego da rede pode copiar o cookie e usá-lo enquanto ele valer (até 30 dias com "Lembrar de mim"). Se for expor fora de casa, use um proxy reverso com HTTPS.
 - A **primeira reprodução** de uma gravação leva ~50s (download + transcode); reproduções seguintes são instantâneas por vir do cache em `recordings/`.
 - Cada gravação em cache ocupa ~27 MB. Apague `recordings/` quando quiser liberar espaço.
