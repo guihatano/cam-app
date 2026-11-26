@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 import threading
 import time
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from urllib.parse import urlparse
 
 from flask import (
@@ -49,6 +49,13 @@ def load_or_create_secret_key(path):
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY") or load_or_create_secret_key(SECRET_KEY_FILE)
+
+# "Lembrar de mim": sessão permanente que expira após SESSION_DAYS sem uso. O Flask
+# reemite o cookie a cada requisição (SESSION_REFRESH_EACH_REQUEST), então o prazo
+# desliza. Não ligar SESSION_COOKIE_SECURE enquanto o app rodar em HTTP puro.
+SESSION_DAYS = 30
+app.permanent_session_lifetime = timedelta(days=SESSION_DAYS)
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 RTSP_URL = os.getenv("RTSP_URL", "rtsp://admin:admin@192.168.1.100:554/")
 JPEG_QUALITY = int(os.getenv("JPEG_QUALITY", "80"))
@@ -239,7 +246,9 @@ def login():
         ok_user = hmac.compare_digest(user, AUTH_USER)
         ok_pw = bool(AUTH_PASSWORD) and hmac.compare_digest(pw, AUTH_PASSWORD)
         if ok_user and ok_pw:
+            session.clear()
             session["auth"] = True
+            session.permanent = request.form.get("remember") == "on"
             nxt = request.args.get("next", "")
             return redirect(nxt if nxt.startswith("/") else url_for("index"))
         error = "Usuário ou senha inválidos."

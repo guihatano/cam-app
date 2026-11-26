@@ -1,5 +1,6 @@
 import os
 import stat
+from datetime import datetime, timedelta, timezone
 
 from app import load_or_create_secret_key
 
@@ -58,6 +59,47 @@ def test_logout_ends_session(client):
     resp = client.get("/", headers=HTML)
     assert resp.status_code == 302
     assert resp.headers["Location"].startswith("/login")
+
+
+
+# --- "Lembrar de mim": sessão permanente de 30 dias ---
+
+def test_login_page_shows_remember_checkbox_unchecked(client):
+    html = client.get("/login").get_data(as_text=True)
+
+    assert 'name="remember"' in html
+    assert "Lembrar de mim" in html
+    assert "checked" not in html
+
+
+def test_login_with_remember_sets_30_day_cookie(client):
+    cookie = session_set_cookie(login(client, remember="on"))
+
+    assert cookie is not None
+    assert "HttpOnly" in cookie
+    assert "SameSite=Lax" in cookie
+    expires = client.get_cookie("session").expires
+    now = datetime.now(timezone.utc)
+    assert now + timedelta(days=29) < expires < now + timedelta(days=31)
+
+
+def test_remembered_session_is_renewed_on_each_request(client):
+    login(client, remember="on")
+
+    cookie = session_set_cookie(client.get("/", headers=HTML))
+
+    assert cookie is not None
+    assert "Expires=" in cookie
+
+
+def test_session_cookie_survives_a_fresh_client(app, client):
+    login(client, remember="on")
+    value = client.get_cookie("session").value
+
+    other = app.test_client()
+    other.set_cookie("session", value)
+
+    assert other.get("/", headers=HTML).status_code == 200
 
 
 # --- Chave de sessão persistente (.secret_key) ---

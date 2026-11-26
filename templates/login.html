@@ -28,6 +28,15 @@
       padding: 9px 12px; border-radius: 6px; font-size: 0.9rem; margin-bottom: 14px;
     }
     input:focus { outline: none; border-color: #2e7d32; }
+    .remember {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 0.8rem; color: #aaa; margin-bottom: 16px;
+      padding: 4px 0; cursor: pointer; user-select: none;
+    }
+    .remember input {
+      width: 18px; height: 18px; margin: 0; padding: 0;
+      accent-color: #2e7d32; cursor: pointer;
+    }
     button {
       width: 100%; background: #2e7d32; border: none; color: #fff;
       padding: 10px; border-radius: 6px; cursor: pointer; font-size: 0.9rem;
@@ -45,6 +54,10 @@
     <input id="user" name="user" autocomplete="username" autofocus />
     <label for="password">Senha</label>
     <input id="password" name="password" type="password" autocomplete="current-password" />
+    <label class="remember">
+      <input type="checkbox" name="remember" />
+      Lembrar de mim
+    </label>
     <button type="submit">Entrar</button>
   </form>
 </body>
