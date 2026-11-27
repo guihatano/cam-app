@@ -107,7 +107,8 @@
 
     .overlay.hidden { display: none; }
 
-    /* Controls */
+    /* Controls: botões e status empilhados (em telas baixas, na mesma linha) */
+    .live-bar { display: flex; flex-direction: column; align-items: center; gap: 16px; }
     .controls { display: flex; gap: 12px; }
 
     button {
@@ -259,6 +260,16 @@
       color: #555;
       text-align: center;
     }
+
+    /* Telas baixas (tablet ou celular deitado): menos cabeçalho, mais vídeo.
+       Status vai para a mesma linha dos botões. */
+    @media (max-height: 560px) {
+      body { padding: 8px 16px; gap: 8px; }
+      h1 { display: none; }
+      .panel.active { gap: 8px; }
+      .live-bar { flex-direction: row; }
+      .logout { top: 8px; }
+    }
   </style>
 </head>
 <body>
@@ -311,15 +322,17 @@
       <div class="overlay" id="overlay">Conectando...</div>
     </div>
 
-    <div class="controls">
-      <button onclick="snapshot()">Salvar foto</button>
-      <button onclick="reloadStream()">Reconectar</button>
-      <button id="quality-btn" onclick="toggleQuality()" title="Alternar qualidade do ao vivo"></button>
-    </div>
+    <div class="live-bar">
+      <div class="controls">
+        <button onclick="snapshot()">Salvar foto</button>
+        <button onclick="reloadStream()">Reconectar</button>
+        <button id="quality-btn" onclick="toggleQuality()" title="Alternar qualidade do ao vivo"></button>
+      </div>
 
-    <div class="status">
-      <span class="dot" id="dot"></span>
-      <span id="status-text">Aguardando stream...</span>
+      <div class="status">
+        <span class="dot" id="dot"></span>
+        <span id="status-text">Aguardando stream...</span>
+      </div>
     </div>
   </div>
 
@@ -367,6 +380,7 @@
     const statusText = document.getElementById('status-text');
 
     function onLoad() {
+      layoutLive();
       overlay.classList.add('hidden');
       dot.classList.add('live');
       statusText.textContent = 'Ao vivo';
@@ -394,14 +408,16 @@
     // Encaixa na altura da janela para as duas câmeras aparecerem sem rolar.
     const cams = document.getElementById('cams');
     const panelLive = document.getElementById('panel-live');
-    const belowCams = [panelLive.querySelector('.controls'), panelLive.querySelector('.status')];
+    const liveBar = panelLive.querySelector('.live-bar');
     let expandedCam = null;  // 'top' | 'bottom' | null
 
     function layoutLive() {
       if (currentTab !== 'live') return;
       const W = panelLive.clientWidth;
       const top = cams.getBoundingClientRect().top + window.scrollY;
-      const below = belowCams.reduce((h, el) => h + el.offsetHeight + 16, 0) + 24;
+      const gap = parseFloat(getComputedStyle(panelLive).rowGap) || 0;
+      const padBottom = parseFloat(getComputedStyle(document.body).paddingBottom) || 0;
+      const below = liveBar.offsetHeight + gap + padBottom;
       const H = Math.max(window.innerHeight - top - below, 180);
       let cols, rows;
       if (expandedCam) {
@@ -415,7 +431,10 @@
       cams.dataset.layout = cols === 2 ? 'side' : 'stacked';
       cams.style.width = Math.floor(unit * 16 * cols) + 'px';
     }
+    // No celular/tablet a barra do navegador muda a altura útil depois do load
     window.addEventListener('resize', layoutLive);
+    window.addEventListener('orientationchange', layoutLive);
+    if (window.visualViewport) window.visualViewport.addEventListener('resize', layoutLive);
 
     cams.addEventListener('click', (e) => {
       if (e.target.closest('.ptz-wrap, .zoom-wrap')) return;
