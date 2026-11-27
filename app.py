@@ -237,6 +237,19 @@ def require_login():
     return "Unauthorized", 401
 
 
+def safe_next(nxt):
+    """Só aceita caminho local ("/algo"); qualquer outra coisa volta para a index.
+
+    Bloqueia "//host" (URL sem esquema), "\\" (navegadores tratam como "/") e
+    caracteres de controle/espaço (navegadores removem tab/quebra de linha da URL,
+    então "/\\t/host" vira "//host").
+    """
+    if (nxt.startswith("/") and not nxt.startswith("//")
+            and "\\" not in nxt and not any(c.isspace() or ord(c) < 32 for c in nxt)):
+        return nxt
+    return url_for("index")
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     error = None
@@ -249,8 +262,7 @@ def login():
             session.clear()
             session["auth"] = True
             session.permanent = request.form.get("remember") == "on"
-            nxt = request.args.get("next", "")
-            return redirect(nxt if nxt.startswith("/") else url_for("index"))
+            return redirect(safe_next(request.args.get("next", "")))
         error = "Usuário ou senha inválidos."
     return render_template("login.html", error=error)
 

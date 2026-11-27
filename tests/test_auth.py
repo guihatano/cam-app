@@ -2,6 +2,8 @@ import os
 import stat
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from app import load_or_create_secret_key
 
 HTML = {"Accept": "text/html"}
@@ -60,6 +62,30 @@ def test_logout_ends_session(client):
     assert resp.status_code == 302
     assert resp.headers["Location"].startswith("/login")
 
+
+
+
+# --- Redirect pós-login (parâmetro next) ---
+
+def test_login_redirects_to_local_next_path(client):
+    resp = client.post("/login?next=/playback?filename=x", data={"user": "admin", "password": "test-pass"})
+
+    assert resp.status_code == 302
+    assert resp.headers["Location"] == "/playback?filename=x"
+
+
+@pytest.mark.parametrize("nxt", [
+    "//evil.com",
+    "/\\evil.com",
+    "/\t/evil.com",
+    "https://evil.com",
+    "evil.com",
+])
+def test_login_ignores_next_pointing_outside_the_app(client, nxt):
+    resp = client.post("/login", query_string={"next": nxt}, data={"user": "admin", "password": "test-pass"})
+
+    assert resp.status_code == 302
+    assert resp.headers["Location"] == "/"
 
 
 # --- "Lembrar de mim": sessão permanente de 30 dias ---
